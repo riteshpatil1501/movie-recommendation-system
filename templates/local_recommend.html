@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        Recommendations for {{ title|title }}
+    </title>
+
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+    >
+
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+</head>
+
+
+<body class="recommend-page">
+
+
+    <main class="recommend-container">
+
+
+        <!-- Header -->
+
+        <header class="results-header">
+
+            <p class="small-title">
+                YOUR NEXT WATCH
+            </p>
+
+
+            <h1>
+                Recommendations for
+                <span>{{ title|title }}</span>
+            </h1>
+
+
+            <p>
+                Based on movie content, genres, actors and director similarity.
+            </p>
+
+        </header>
+
+
+        <!-- Error -->
+
+        {% if error %}
+
+            <div class="no-results">
+
+                <h2>
+                    Movie Not Found
+                </h2>
+
+                <p>
+                    {{ error }}
+                </p>
+
+            </div>
+
+        {% endif %}
+
+
+        <!-- Recommendations -->
+
+        {% if recommendations %}
+
+            <section class="movie-grid">
+
+
+                {% for movie in recommendations %}
+
+                    <form
+                        method="POST"
+                        action="/local-recommend"
+                        class="movie-card-form"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="name"
+                            value="{{ movie.title }}"
+                        >
+
+
+                        <button
+                            type="submit"
+                            class="movie-card"
+                            aria-label="Get recommendations for {{ movie.title }}"
+                        >
+
+
+                            <span class="rank">
+                                {{ loop.index }}
+                            </span>
+
+
+                            <span class="similarity">
+                                {{ movie.score }}% match
+                            </span>
+
+
+                            <h2>
+                                {{ movie.title|title }}
+                            </h2>
+
+
+                            <div class="movie-meta">
+
+
+                                {% if movie.genres %}
+
+                                    <div class="movie-meta-label">
+                                        Genre
+                                    </div>
+
+                                    <div class="movie-meta-value">
+                                        {{ movie.genres }}
+                                    </div>
+
+                                {% endif %}
+
+
+                                {% if movie.director %}
+
+                                    <div class="movie-meta-label">
+                                        Director
+                                    </div>
+
+                                    <div class="movie-meta-value">
+                                        {{ movie.director }}
+                                    </div>
+
+                                {% endif %}
+
+
+                                {% if movie.actors %}
+
+                                    <div class="movie-meta-label">
+                                        Cast
+                                    </div>
+
+                                    <div class="movie-meta-value">
+                                        {{ movie.actors }}
+                                    </div>
+
+                                {% endif %}
+
+
+                            </div>
+
+
+                        </button>
+
+                    </form>
+
+                {% endfor %}
+
+
+            </section>
+
+        {% endif %}
+
+
+        <!-- Back -->
+
+        <div class="back-button-wrapper">
+
+            <a
+                href="/"
+                class="back-button"
+            >
+
+                <i class="fa fa-search"></i>
+
+                Search Another Movie
+
+            </a>
+
+        </div>
+
+
+    </main>
+
+</body>
+
+</html>

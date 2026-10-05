@@ -1,36 +1,89 @@
-new autoComplete({
-    data: {                              // Data src [Array, Function, Async] | (REQUIRED)
-      src: films,
-    },
-    selector: "#autoComplete",           // Input field selector              | (Optional)
-    threshold: 2,                        // Min. Chars length to start Engine | (Optional)
-    debounce: 100,                       // Post duration for engine to start | (Optional)
-    searchEngine: "strict",              // Search Engine type/mode           | (Optional)
-    resultsList: {                       // Rendered results list object      | (Optional)
-        render: true,
-        container: source => {
-            source.setAttribute("id", "food_list");
-        },
-        destination: document.querySelector("#autoComplete"),
-        position: "afterend",
-        element: "ul"
-    },
-    maxResults: 5,                         // Max. number of rendered results | (Optional)
-    highlight: true,                       // Highlight matching results      | (Optional)
-    resultItem: {                          // Rendered result item            | (Optional)
-        content: (data, source) => {
-            source.innerHTML = data.match;
-        },
-        element: "li"
-    },
-    noResults: () => {                     // Action script on noResults      | (Optional)
-        const result = document.createElement("li");
-        result.setAttribute("class", "no_result");
-        result.setAttribute("tabindex", "1");
-        result.innerHTML = "No Results";
-        document.querySelector("#autoComplete_list").appendChild(result);
-    },
-    onSelection: feedback => {             // Action script onSelection event | (Optional)
-        document.getElementById('autoComplete').value = feedback.selection.value;
+document.addEventListener("DOMContentLoaded", function () {
+
+    const input = document.getElementById("autoComplete");
+
+    if (!input) {
+        console.error("Autocomplete input not found.");
+        return;
     }
+
+    const movieList = Array.isArray(window.films) ? window.films : [];
+
+    console.log("Autocomplete loaded with", movieList.length, "movies.");
+
+    // Create dropdown
+    const dropdown = document.createElement("div");
+    dropdown.id = "movieSuggestions";
+
+    input.parentElement.appendChild(dropdown);
+
+    // Hide initially
+    dropdown.style.display = "none";
+
+    // Search movies
+    input.addEventListener("input", function () {
+
+        const query = input.value.trim().toLowerCase();
+
+        dropdown.innerHTML = "";
+
+        if (query.length < 1) {
+            dropdown.style.display = "none";
+            return;
+        }
+
+        // Find matching movies
+        const matches = movieList
+            .filter(movie =>
+                String(movie).toLowerCase().includes(query)
+            )
+            .slice(0, 8);
+
+        if (matches.length === 0) {
+            dropdown.style.display = "none";
+            return;
+        }
+
+        // Create suggestions
+        matches.forEach(function (movie) {
+
+            const item = document.createElement("div");
+
+            item.className = "movie-suggestion";
+            item.textContent = movie;
+
+            item.addEventListener("mousedown", function (event) {
+
+                event.preventDefault();
+
+                input.value = movie;
+
+                dropdown.innerHTML = "";
+                dropdown.style.display = "none";
+
+                const button = document.querySelector(".movie-button");
+
+                if (button) {
+                    button.disabled = false;
+                }
+            });
+
+            dropdown.appendChild(item);
+        });
+
+        dropdown.style.display = "block";
+    });
+
+    // Hide dropdown when clicking elsewhere
+    document.addEventListener("click", function (event) {
+
+        if (
+            event.target !== input &&
+            !dropdown.contains(event.target)
+        ) {
+            dropdown.style.display = "none";
+        }
+
+    });
+
 });

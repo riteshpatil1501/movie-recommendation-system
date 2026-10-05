@@ -1,156 +1,274 @@
-import json
-import pickle
-import requests
-import bs4 as bs
-import numpy as np
+from pathlib import Path
+
 import pandas as pd
-import urllib.request
 from flask import Flask, render_template, request
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# loading the dataset and the trained model
-try:
-    clf = pickle.load(open("./Artifacts\nlp_model.pkl", 'rb'))
-    vectorizer = pickle.load(open("./Artifacts\tranform.pkl",'rb'))
-except:
-    print("Error in loading Artifacts")
 
-# creating a similarity matrix using count vectorizer and cosine similarity
-def create_similarity():
-    try:
-        data = pd.read_csv(r"C:\Users\KALYAN\Desktop\Projects\Movie Recommendation System\Artifacts\main_data.csv")
-        cv = CountVectorizer()
-        count_matrix = cv.fit_transform(data['comb']) 
-        similarity = cosine_similarity(count_matrix)
-        return data,similarity
-    except Exception as e:
-        print(e)
+# ---------------------------------------------------------
+# Project paths
+# ---------------------------------------------------------
 
-def rcmd(m):
-    m = m.lower()
-    try:
-        data.head()
-        similarity.shape 
-    except:
-        data, similarity = create_similarity()
-    if m not in data['movie_title'].unique():
-        return('Sorry! The movie you requested is not in our database. Please check the spelling or try with some other movies')
-    else:
-        i = data.loc[data['movie_title']==m].index[0]
-        lst = list(enumerate(similarity[i]))
-        lst = sorted(lst, key = lambda x:x[1] ,reverse=True)
-        lst = lst[1:11] # excluding first item since it is the requested movie itself
-        l = []
-        for i in range(len(lst)):
-            a = lst[i][0]
-            l.append(data['movie_title'][a])
-        return l
-    
-# converting list of string to list (eg. "["abc","def"]" to ["abc","def"])
-def convert_to_list(my_list):
-    my_list = my_list.split('","')
-    my_list[0] = my_list[0].replace('["','')
-    my_list[-1] = my_list[-1].replace('"]','')
-    return my_list
+BASE_DIR = Path(__file__).resolve().parent
+ARTIFACTS_DIR = BASE_DIR / "Artifacts"
+DATA_FILE = ARTIFACTS_DIR / "main_data.csv"
 
-def get_suggestions():
-    data = pd.read_csv('main_data.csv')
-    return list(data['movie_title'].str.capitalize())
+
+# ---------------------------------------------------------
+# Flask application
+# ---------------------------------------------------------
 
 app = Flask(__name__)
+
+
+# ---------------------------------------------------------
+# Global ML data
+# ---------------------------------------------------------
+
+movie_data = None
+count_matrix = None
+vectorizer = None
+
+
+# ---------------------------------------------------------
+# Load movie dataset and create ML representation
+# ---------------------------------------------------------
+
+def load_movie_data():
+    global movie_data
+    global count_matrix
+    global vectorizer
+
+    if movie_data is not None and count_matrix is not None:
+        return
+
+    if not DATA_FILE.exists():
+        raise FileNotFoundError(
+            f"Movie dataset not found at: {DATA_FILE}"
+        )
+
+    print("Loading movie dataset...")
+
+    movie_data = pd.read_csv(DATA_FILE)
+
+    required_columns = [
+        "movie_title",
+        "director_name",
+        "actor_1_name",
+        "actor_2_name",
+        "actor_3_name",
+        "genres",
+        "comb"
+    ]
+
+    missing_columns = [
+        column
+        for column in required_columns
+        if column not in movie_data.columns
+    ]
+
+    if missing_columns:
+        raise ValueError(
+            f"Missing columns in main_data.csv: {missing_columns}"
+        )
+
+    # Clean missing values
+    for column in required_columns:
+        movie_data[column] = movie_data[column].fillna("").astype(str)
+
+    # Keep the original movie title for display
+    movie_data["display_title"] = movie_data["movie_title"].str.strip()
+
+    # Normalized title used for searching
+    movie_data["normalized_title"] = (
+        movie_data["movie_title"]
+        .str.strip()
+        .str.lower()
+    )
+
+    # Create the ML feature matrix
+    vectorizer = CountVectorizer()
+
+    count_matrix = vectorizer.fit_transform(
+        movie_data["comb"]
+    )
+
+    print(
+        f"Movie dataset loaded successfully: "
+        f"{len(movie_data)} movies"
+    )
+
+    print("Movie recommendation model is ready!")
+
+
+# ---------------------------------------------------------
+# Get autocomplete suggestions
+# ---------------------------------------------------------
+
+def get_suggestions():
+    load_movie_data()
+
+    return movie_data["display_title"].tolist()
+
+
+# ---------------------------------------------------------
+# Get movie recommendations
+# ---------------------------------------------------------
+
+def get_recommendations(movie_title, number_of_recommendations=10):
+    load_movie_data()
+
+    movie_title = movie_title.strip().lower()
+
+    matches = movie_data.index[
+        movie_data["normalized_title"] == movie_title
+    ].tolist()
+
+    if not matches:
+        return None
+
+    movie_index = matches[0]
+
+    # Calculate similarity only for the selected movie.
+    # This is much more memory efficient than creating
+    # the complete movie-to-movie similarity matrix.
+    similarity_scores = cosine_similarity(
+        count_matrix[movie_index],
+        count_matrix
+    ).flatten()
+
+    # Highest similarity first
+    similar_indices = similarity_scores.argsort()[::-1]
+
+    recommendations = []
+
+    for index in similar_indices:
+
+        # Skip the movie the user searched for
+        if index == movie_index:
+            continue
+
+        row = movie_data.iloc[index]
+
+        recommendations.append({
+            "title": row["display_title"],
+            "director": row["director_name"],
+            "actors": ", ".join(
+                actor
+                for actor in [
+                    row["actor_1_name"],
+                    row["actor_2_name"],
+                    row["actor_3_name"]
+                ]
+                if actor.strip()
+            ),
+            "genres": row["genres"],
+            "score": round(
+                float(similarity_scores[index]) * 100,
+                1
+            )
+        })
+
+        if len(recommendations) >= number_of_recommendations:
+            break
+
+    return recommendations
+
+
+# ---------------------------------------------------------
+# Home page
+# ---------------------------------------------------------
 
 @app.route("/")
 @app.route("/home")
 def home():
-    suggestions = get_suggestions()
-    return render_template('home.html',suggestions=suggestions)
+    try:
+        suggestions = get_suggestions()
 
-@app.route("/similarity",methods=["POST"])
+        return render_template(
+            "home.html",
+            suggestions=suggestions
+        )
+
+    except Exception as error:
+        return f"""
+        <h2>Application Error</h2>
+        <p>{error}</p>
+        """
+
+
+# ---------------------------------------------------------
+# Similarity API
+# ---------------------------------------------------------
+
+@app.route("/similarity", methods=["POST"])
 def similarity():
-    movie = request.form['name']
-    rc = rcmd(movie)
-    if type(rc)==type('string'):
-        return rc
-    else:
-        m_str="---".join(rc)
-        return m_str
 
-@app.route("/recommend",methods=["POST"])
-def recommend():
-    # getting data from AJAX request
-    title = request.form['title']
-    cast_ids = request.form['cast_ids']
-    cast_names = request.form['cast_names']
-    cast_chars = request.form['cast_chars']
-    cast_bdays = request.form['cast_bdays']
-    cast_bios = request.form['cast_bios']
-    cast_places = request.form['cast_places']
-    cast_profiles = request.form['cast_profiles']
-    imdb_id = request.form['imdb_id']
-    poster = request.form['poster']
-    genres = request.form['genres']
-    overview = request.form['overview']
-    vote_average = request.form['rating']
-    vote_count = request.form['vote_count']
-    release_date = request.form['release_date']
-    runtime = request.form['runtime']
-    status = request.form['status']
-    rec_movies = request.form['rec_movies']
-    rec_posters = request.form['rec_posters']
+    movie = request.form.get("name", "").strip()
 
-    # get movie suggestions for auto complete
-    suggestions = get_suggestions()
+    if not movie:
+        return "Please enter a movie name.", 400
 
-    # call the convert_to_list function for every string that needs to be converted to list
-    rec_movies = convert_to_list(rec_movies)
-    rec_posters = convert_to_list(rec_posters)
-    cast_names = convert_to_list(cast_names)
-    cast_chars = convert_to_list(cast_chars)
-    cast_profiles = convert_to_list(cast_profiles)
-    cast_bdays = convert_to_list(cast_bdays)
-    cast_bios = convert_to_list(cast_bios)
-    cast_places = convert_to_list(cast_places)
-    
-    # convert string to list (eg. "[1,2,3]" to [1,2,3])
-    cast_ids = cast_ids.split(',')
-    cast_ids[0] = cast_ids[0].replace("[","")
-    cast_ids[-1] = cast_ids[-1].replace("]","")
-    
-    # rendering the string to python string
-    for i in range(len(cast_bios)):
-        cast_bios[i] = cast_bios[i].replace(r'\n', '\n').replace(r'\"','\"')
-    
-    # combining multiple lists as a dictionary which can be passed to the html file so that it can be processed easily and the order of information will be preserved
-    movie_cards = {rec_posters[i]: rec_movies[i] for i in range(len(rec_posters))}
-    
-    casts = {cast_names[i]:[cast_ids[i], cast_chars[i], cast_profiles[i]] for i in range(len(cast_profiles))}
+    recommendations = get_recommendations(movie)
 
-    cast_details = {cast_names[i]:[cast_ids[i], cast_profiles[i], cast_bdays[i], cast_places[i], cast_bios[i]] for i in range(len(cast_places))}
+    if recommendations is None:
+        return (
+            "Sorry! The movie you requested is not in our database. "
+            "Please check the spelling or try with some other movies"
+        )
 
-    # web scraping to get user reviews from IMDB site
-    sauce = urllib.request.urlopen('https://www.imdb.com/title/{}/reviews?ref_=tt_ov_rt'.format(imdb_id)).read()
-    soup = bs.BeautifulSoup(sauce,'lxml')
-    soup_result = soup.find_all("div",{"class":"text show-more__control"})
+    return "---".join(
+        movie["title"]
+        for movie in recommendations
+    )
 
-    reviews_list = [] # list of reviews
-    reviews_status = [] # list of comments (good or bad)
-    for reviews in soup_result:
-        if reviews.string:
-            reviews_list.append(reviews.string)
-            # passing the review to our model
-            movie_review_list = np.array([reviews.string])
-            movie_vector = vectorizer.transform(movie_review_list)
-            pred = clf.predict(movie_vector)
-            reviews_status.append('Good' if pred else 'Bad')
 
-    # combining reviews and comments into a dictionary
-    movie_reviews = {reviews_list[i]: reviews_status[i] for i in range(len(reviews_list))}     
+# ---------------------------------------------------------
+# Local recommendation results page
+# ---------------------------------------------------------
 
-    # passing all the data to the html file
-    return render_template('recommend.html',title=title,poster=poster,overview=overview,vote_average=vote_average,
-        vote_count=vote_count,release_date=release_date,runtime=runtime,status=status,genres=genres,
-        movie_cards=movie_cards,reviews=movie_reviews,casts=casts,cast_details=cast_details)
+@app.route("/local-recommend", methods=["POST"])
+def local_recommend():
 
-if __name__ == '__main__':
-    app.run(debug=True,host="0.0.0.0",port=5000)
+    movie = request.form.get("name", "").strip()
+
+    if not movie:
+        return render_template(
+            "local_recommend.html",
+            title="Movie",
+            recommendations=[],
+            error="Please enter a movie name."
+        )
+
+    recommendations = get_recommendations(movie)
+
+    if recommendations is None:
+        return render_template(
+            "local_recommend.html",
+            title=movie,
+            recommendations=[],
+            error=(
+                "The movie was not found in our database. "
+                "Please select a movie from the suggestions."
+            )
+        )
+
+    return render_template(
+        "local_recommend.html",
+        title=movie,
+        recommendations=recommendations,
+        error=None
+    )
+
+
+# ---------------------------------------------------------
+# Run application
+# ---------------------------------------------------------
+
+if __name__ == "__main__":
+    app.run(
+        debug=True,
+        host="0.0.0.0",
+        port=5000
+    )
