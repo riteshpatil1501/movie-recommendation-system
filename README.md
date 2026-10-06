@@ -40,7 +40,7 @@ Follow these steps to install and set up the project directly from the GitHub re
    - Navigate to the directory where you want to install the project.
    - Run the following command to clone the GitHub repository:
      ```
-     git clone https://github.com/KalyanMurapaka45/End-to-End-Movie-Recommendation-System.git
+     git clone https://github.com/riteshpatil1501/Movie-Recommendation-System.git
      ```
 
 2. **Create a Virtual Environment** (Optional but recommended)
@@ -75,29 +75,7 @@ Follow these steps to install and set up the project directly from the GitHub re
    - Open a web browser or the appropriate client to access the project.
   
 <br><br>
-### Option 2: Installation from DockerHub
 
-If you prefer to use Docker, you can install and run the project using a Docker container from DockerHub:
-
-1. **Pull the Docker Image**
-   - Open your terminal or command prompt.
-   - Run the following command to pull the Docker image from DockerHub:
-     ```
-     docker pull kalyan45/movierecommend-app
-     ```
-
-2. **Run the Docker Container**
-   - Start the Docker container by running the following command, and mapping any necessary ports:
-     ```
-     docker run -p 5000:5000 kalyan45/movierecommend-app
-     ```
-
-3. **Access the Project**
-   - Open a web browser or the appropriate client to access the project.
-
-
-
-   
 # Contributing
 
 Contributions make the open-source community such an amazing place to learn, inspire, and create. I would greatly appreciate any contributions you make.
